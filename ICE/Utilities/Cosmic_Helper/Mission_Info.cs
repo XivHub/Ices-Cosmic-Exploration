@@ -128,7 +128,28 @@ public static partial class CosmicHelper
         public int Max { get; set; } = 0;
     }
 
-    public static unsafe Dictionary<uint, ClassInfo> Cosmic_ClassInfo()
+    private static Dictionary<uint, ClassInfo> _classInfoCache;
+    private static DateTime _classInfoCacheFrame;
+
+    /// <summary>
+    /// Per-frame memoized view of relic-tool progression. The underlying game data only
+    /// changes on discrete turn-in/stage events (never mid-frame), yet this is read many
+    /// times per frame across UI widgets, so we read game memory at most once per frame.
+    /// The scheduler's Framework.Update runs before UiBuilder.Draw, so it is the first
+    /// caller each frame and always triggers a fresh read; the UI reuses that snapshot.
+    /// </summary>
+    public static Dictionary<uint, ClassInfo> Cosmic_ClassInfo()
+    {
+        var frame = Svc.Framework.LastUpdateUTC;
+        if (_classInfoCache != null && _classInfoCacheFrame == frame)
+            return _classInfoCache;
+
+        _classInfoCache = Compute_Cosmic_ClassInfo();
+        _classInfoCacheFrame = frame;
+        return _classInfoCache;
+    }
+
+    private static unsafe Dictionary<uint, ClassInfo> Compute_Cosmic_ClassInfo()
     {
         Dictionary<uint, ClassInfo> cosmicClassInfo = new()
         {

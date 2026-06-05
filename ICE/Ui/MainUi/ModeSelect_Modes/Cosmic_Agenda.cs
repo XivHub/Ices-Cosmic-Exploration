@@ -753,12 +753,16 @@ namespace ICE.Ui.MainUi.ModeSelect_Modes
                             {
                                 var planet = Player.Territory.RowId;
 
-                                var sheetInfo = CosmicHelper.SheetMissionDict
-                                    .Where(x => x.Value.Jobs.Contains(agendaInfo.SelectedJob))
-                                    .Where(x => x.Value.TerritoryId == planet);
-
-                                current = sheetInfo.Where(x => x.Value.CompletionStatus is CosmicHelper.Status.Gold).ToList().Count();
-                                goal = sheetInfo.Count();
+                                // Single pass: avoids enumerating the filtered set twice plus a throwaway List alloc each frame.
+                                foreach (var kv in CosmicHelper.SheetMissionDict)
+                                {
+                                    var info = kv.Value;
+                                    if (info.TerritoryId != planet || !info.Jobs.Contains(agendaInfo.SelectedJob))
+                                        continue;
+                                    goal++;
+                                    if (info.CompletionStatus is CosmicHelper.Status.Gold)
+                                        current++;
+                                }
                             }
 
                             var rowY = ImGui.GetCursorScreenPos().Y;

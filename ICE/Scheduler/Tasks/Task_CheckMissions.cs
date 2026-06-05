@@ -152,6 +152,32 @@ namespace ICE.Scheduler.Tasks
 
             return entry;
         }
+
+        // --- Relic-grind mission scoring tunables (see RelicMode scoring below) ---
+        // Explore each eligible mission this many times (gathering real timing data) before
+        // committing to pure XP-per-second exploitation. Keeps us from locking onto the first
+        // few measured missions and missing globally better ones.
+        private const int RelicExploreSamples = 3;
+        // Additive tier that guarantees any under-sampled eligible mission outranks any
+        // fully-sampled one (must dwarf realistic XP/sec values).
+        private const float RelicExploreTier = 1_000_000f;
+        // Used only if a mission has no usable time estimate at all (defensive /0 guard).
+        private const double RelicFallbackSeconds = 90;
+
+        // Rough intrinsic-time estimate used only until a mission has RelicExploreSamples real
+        // completions; measured AverageTime replaces it after that. Reads live craft/gather
+        // counts, so it captures "craft 1 item vs 3" without needing to have run the mission.
+        private static double EstimateMissionSeconds(CosmicHelper.CosmicInfo info)
+        {
+            const double baseSeconds = 30;
+            const double perCraft = 20;
+            const double perGather = 10;
+            int crafts = info.Crafts_Main.Count + info.Crafts_Pre.Count;
+            int gathers = info.Gathering_Min.Count;
+            double est = baseSeconds + perCraft * crafts + perGather * gathers;
+            return est > 0 ? est : RelicFallbackSeconds;
+        }
+
         public static bool? RefreshMissionLibrary()
         {
             string tag = "Task Check Mission: Refresh Mission Library";
@@ -775,18 +801,35 @@ namespace ICE.Scheduler.Tasks
                                         continue;
                                     }
 
-                                    float score = 0;
+                                    float useful = 0;
                                     foreach (var reward in sheetInfo.RelicXpInfo)
                                     {
                                         if (urgency.TryGetValue(reward.Key, out var info))
                                         {
                                             float contribution = info * reward.Value;
                                             if (contribution > 0)
-                                            {
-                                                score += contribution;
-                                            }
+                                                useful += contribution;
                                         }
                                     }
+                                    if (useful <= 0)
+                                        continue;
+
+                                    // Time estimate: measured running average once we have enough samples,
+                                    // otherwise a structural estimate from craft/gather counts.
+                                    int samples = C.MissionConfig.TryGetValue(missionId, out var mCfg) ? mCfg.TotalCompletions : 0;
+                                    double time = (mCfg != null && mCfg.AverageTime > 0 && samples >= RelicExploreSamples)
+                                        ? mCfg.AverageTime
+                                        : EstimateMissionSeconds(sheetInfo);
+                                    if (time <= 0)
+                                        time = RelicFallbackSeconds;
+
+                                    // Under-sampled eligible missions are explored first (data gathering),
+                                    // ranked among themselves by estimated yield; fully-sampled ones compete
+                                    // on measured XP-per-second. Exploration stays within the eligible set, so
+                                    // every pick still advances the grind (never a wasted mission).
+                                    float perSecond = (float)(useful / time);
+                                    float score = samples < RelicExploreSamples ? RelicExploreTier + perSecond : perSecond;
+
                                     if (score > bestScore)
                                     {
                                         bestScore = score;
