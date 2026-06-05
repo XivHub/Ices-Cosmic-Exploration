@@ -801,12 +801,27 @@ namespace ICE.Scheduler.Tasks
                                         continue;
                                     }
 
+                                    bool intermediate = classInfo.Stage_Current != classInfo.Stage_Next;
                                     float useful = 0;
                                     foreach (var reward in sheetInfo.RelicXpInfo)
                                     {
                                         if (urgency.TryGetValue(reward.Key, out var info))
                                         {
-                                            float contribution = info * reward.Value;
+                                            // Cap each reward at the XP still actually needed for this type, so a
+                                            // mission that massively overshoots a near-complete type doesn't outrank
+                                            // one that just tops it off. Mirrors the urgency branch above (Needed on
+                                            // intermediate stages, Max on the final stage). Only caps when remaining
+                                            // is positive, so the degenerate "all maxed" urgency fallback (remaining
+                                            // <= 0) keeps full-reward behaviour and can't zero every mission into a
+                                            // reroll loop.
+                                            int effectiveReward = reward.Value;
+                                            if (classInfo.CurrentExp.TryGetValue(reward.Key, out var exp))
+                                            {
+                                                int remaining = (intermediate ? exp.Needed : exp.Max) - exp.Current;
+                                                if (remaining > 0)
+                                                    effectiveReward = Math.Min(reward.Value, remaining);
+                                            }
+                                            float contribution = info * effectiveReward;
                                             if (contribution > 0)
                                                 useful += contribution;
                                         }
@@ -829,6 +844,10 @@ namespace ICE.Scheduler.Tasks
                                     // every pick still advances the grind (never a wasted mission).
                                     float perSecond = (float)(useful / time);
                                     float score = samples < RelicExploreSamples ? RelicExploreTier + perSecond : perSecond;
+
+                                    IceLogging.Verbose($"Relic candidate {missionId} ({sheetInfo.Name}): " +
+                                        $"useful={useful:N0} time={time:N0}s xp/s={perSecond:N2} samples={samples}" +
+                                        $"{(samples < RelicExploreSamples ? " [explore]" : "")} score={score:N2}", tag);
 
                                     if (score > bestScore)
                                     {
