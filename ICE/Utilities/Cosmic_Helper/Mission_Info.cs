@@ -182,7 +182,9 @@ public static partial class CosmicHelper
 
         if (researchModule == null || !researchModule->IsLoaded)
         {
-            if (EzThrottler.Throttle("Throttling log message", 3000))
+            // Only an error while actually in cosmic content; elsewhere the research module is
+            // legitimately unloaded (e.g. relic tool inactive), so don't spam the log.
+            if (PlayerHelper.IsInCosmicZone() && EzThrottler.Throttle("Throttling log message", 3000))
                 IceLogging.Error("Research Module has returned null");
             return cosmicClassInfo;
         }
