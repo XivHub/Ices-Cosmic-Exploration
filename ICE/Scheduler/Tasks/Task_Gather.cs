@@ -311,8 +311,25 @@ namespace ICE.Scheduler.Tasks
 
             var zoneId = Player.Territory;
             var missionEntry = CosmicHelper.CurrentMissionInfo;
-            var gatherFile = GatheringRouteLoader.GetRoute(missionEntry.Gather_MapKey);
+            var routeId = missionEntry.Gather_MapKey;
+            var gatherFile = GatheringRouteLoader.GetRoute(routeId);
             var gatherInfo = gatherFile?.Nodes;
+
+            // Task 4.2 — null/incomplete route: attempt synthesis before giving up
+            if (gatherInfo == null || gatherInfo.Count == 0)
+            {
+                if (C.AutoSynthesizeRoutes && P.Navmesh.Installed && P.Navmesh.IsReady()
+                    && EzThrottler.Throttle($"SynthNullRoute_{routeId}", 5000))
+                {
+                    uint jobId = missionEntry.Jobs.Contains(17) ? 17u : 16u;
+                    float radius = missionEntry.Radius > 0 ? (float)missionEntry.Radius : 75f;
+                    RouteSynthesizer.SynthesizeRoute(routeId, missionEntry.TerritoryId, jobId, radius);
+                    gatherInfo = GatheringRouteLoader.GetRoute(routeId)?.Nodes;
+                }
+
+                if (gatherInfo == null || gatherInfo.Count == 0)
+                    return false;
+            }
 
             if (gatherInfo != null)
             {
@@ -334,6 +351,37 @@ namespace ICE.Scheduler.Tasks
                 }
                 else
                 {
+                    // Task 4.3 — lap-guard: if nothing in the entire route is targetable, don't
+                    // fall through to nodeCounter increment (infinite loop). Pause, log, and
+                    // optionally attempt synthesis-extend to pick up newly spawned nodes.
+                    var snapshot = new GatheringSnapshot();
+                    if (!snapshot.AnyTargetable(gatherInfo))
+                    {
+                        if (snapshot.AnyPresent(gatherInfo))
+                        {
+                            if (EzThrottler.Throttle($"GatherRespawnHold_{routeId}", 5000))
+                                IceLogging.Debug("All route nodes on respawn cooldown - holding for next spawn set", "[Task_Gather]");
+                        }
+                        else if (EzThrottler.Throttle($"GatherRouteMistuned_{routeId}", 5000))
+                        {
+                            IceLogging.Warning("No targetable gathering nodes across the entire route. Route node IDs may be mis-tuned for this mission, or nodes are on respawn cooldown.", "[Task_Gather]");
+                        }
+
+                        // Synthesis-extend: union newly-spawned targetable nodes into the route
+                        if (C.AutoSynthesizeRoutes && P.Navmesh.Installed && P.Navmesh.IsReady()
+                            && EzThrottler.Throttle($"SynthExtend_{routeId}", 15000))
+                        {
+                            uint jobId = missionEntry.Jobs.Contains(17) ? 17u : 16u;
+                            float radius = missionEntry.Radius > 0 ? (float)missionEntry.Radius : 75f;
+                            RouteSynthesizer.SynthesizeRoute(routeId, missionEntry.TerritoryId, jobId, radius);
+                            gatherInfo = GatheringRouteLoader.GetRoute(routeId)?.Nodes ?? gatherInfo;
+                        }
+
+                        // Periodic resume: hold most ticks, retry the lap every 8s
+                        if (!EzThrottler.Throttle($"GatherLapResume_{routeId}", 8000))
+                            return false;
+                    }
+
                     // we're currently in a map location that has been previously recorded, so we're going to check to see if we're within range of any first
                     var closestDistance = gatherInfo.Where(x => Player.DistanceTo(x.Position) < 5).FirstOrDefault();
                     if (closestDistance == null)
@@ -365,6 +413,24 @@ namespace ICE.Scheduler.Tasks
                             {
                                 Mission_Settings.nodeCounter = currentNodeIndex;
                             }
+
+                            if (C.RecordGatheringFromPlay)
+                            {
+                                var targeted = (Svc.Targets.Target?.ObjectKind == ObjectKind.GatheringPoint)
+                                    ? Svc.Targets.Target
+                                    : closestNode;
+                                uint targetedBaseId = targeted.BaseId;
+                                Vector3 targetedPos  = targeted.Position;
+                                uint jobId = missionEntry.Jobs.Contains(17) ? 17u : 16u;
+                                Task_NavmeshMove.RecordOpenedNode(
+                                    missionEntry.Gather_MapKey,
+                                    missionEntry.TerritoryId,
+                                    jobId,
+                                    targetedBaseId,
+                                    targetedPos,
+                                    Player.Position);
+                            }
+
                             return true;
                         }
                         else
@@ -423,6 +489,56 @@ namespace ICE.Scheduler.Tasks
                 Mission_Settings.nodeCounter = fallbackIndex >= 0 ? fallbackIndex : 0;
             }
         }
+
+        // Task 4.1 — single-pass snapshot of all gathering points in the object table.
+        // Built once per CheckCurrentLocation tick to avoid O(n^2) re-enumeration.
+        private readonly struct GatheringSnapshot
+        {
+            private readonly Dictionary<uint, Vector3> _targetable; // baseId -> position (targetable only)
+            private readonly HashSet<uint> _present;                // baseIds present regardless of targetable state
+
+            public GatheringSnapshot()
+            {
+                _targetable = new Dictionary<uint, Vector3>();
+                _present    = new HashSet<uint>();
+                foreach (var obj in Svc.Objects)
+                {
+                    if (obj.ObjectKind != ObjectKind.GatheringPoint)
+                        continue;
+                    _present.Add(obj.BaseId);
+                    if (obj.IsTargetable && !_targetable.ContainsKey(obj.BaseId))
+                        _targetable[obj.BaseId] = obj.Position;
+                }
+            }
+
+            public bool IsTargetable(uint baseId) => _targetable.ContainsKey(baseId);
+
+            public bool TryGetTargetablePos(uint baseId, out Vector3 pos) =>
+                _targetable.TryGetValue(baseId, out pos);
+
+            /// <summary>Present in the object table but not targetable (on respawn cooldown).</summary>
+            public bool IsDepleted(uint baseId) =>
+                _present.Contains(baseId) && !_targetable.ContainsKey(baseId);
+
+            /// <summary>True if at least one route node is currently targetable.</summary>
+            public bool AnyTargetable(List<NodeInfo> nodes)
+            {
+                foreach (var n in nodes)
+                    if (_targetable.ContainsKey(n.NodeId))
+                        return true;
+                return false;
+            }
+
+            /// <summary>True if at least one route node is present in the object table (targetable or depleted).</summary>
+            public bool AnyPresent(List<NodeInfo> nodes)
+            {
+                foreach (var n in nodes)
+                    if (_present.Contains(n.NodeId))
+                        return true;
+                return false;
+            }
+        }
+
         private const float SmartRoutingThreshold = 50f;
         public static bool? PathandCheckNode()
         {

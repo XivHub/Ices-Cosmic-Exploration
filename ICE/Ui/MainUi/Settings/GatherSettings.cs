@@ -195,6 +195,15 @@ namespace ICE.Ui.MainUi.Settings
             }
             ImGuiEx.HelpMarker("Will only work while using ICE and not manual mode\n" +
                                "Will also pause pandora cordial usage while on the moon");
+
+            bool AutoSynthesizeRoutes = C.AutoSynthesizeRoutes;
+            if (ImGui.Checkbox("Auto-synthesize missing routes", ref AutoSynthesizeRoutes))
+            {
+                C.AutoSynthesizeRoutes = AutoSynthesizeRoutes;
+                C.Save();
+            }
+            ImGuiEx.HelpMarker("Passively builds a route from nearby live nodes only when a mission has no route (or an incomplete one). Won't overwrite curated routes.");
+
             if (ImGui.CollapsingHeader("Cordial Settings"))
             {
                 int cordialMinRank = C.CordialMinRank;

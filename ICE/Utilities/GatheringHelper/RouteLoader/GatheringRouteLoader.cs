@@ -125,7 +125,39 @@ public static class GatheringRouteLoader
         LoadedRoutes[route.RouteId] = route;
 
         PluginLog.Verbose($"Saved route {route.RouteId} -> {path}");
-        LoadAllRoutes();
+    }
+
+    /// <summary>
+    /// Copy-on-write append: clones the node list, adds the node, then reassigns so any
+    /// draw-thread iterator over the old list is never mutated mid-iteration.
+    /// </summary>
+    public static void AddNodeCow(GatheringRoute route, NodeInfo node)
+    {
+        var list = route.Nodes == null ? new List<NodeInfo>() : new List<NodeInfo>(route.Nodes);
+        list.Add(node);
+        route.Nodes = list;
+    }
+
+    /// <summary>
+    /// Returns the existing route for <paramref name="routeId"/> if present; otherwise creates,
+    /// registers, and persists a new empty route, then returns it.
+    /// </summary>
+    public static GatheringRoute GetOrCreateRoute(uint routeId, uint territoryId, uint jobId)
+    {
+        if (LoadedRoutes.TryGetValue(routeId, out var existing))
+            return existing;
+
+        var route = new GatheringRoute
+        {
+            RouteId        = routeId,
+            TerritoryId    = territoryId,
+            GatheringJobId = jobId,
+            Author         = string.IsNullOrWhiteSpace(C.AuthorName) ? "Ice" : C.AuthorName,
+            Nodes          = new List<NodeInfo>()
+        };
+
+        SaveRoute(route); // inserts into LoadedRoutes and writes to disk
+        return route;
     }
 
     // ── Stubs ────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Interface.Utility.Raii;
 using ECommons.GameHelpers;
 using ICE.Scheduler.Handlers.PictoStuff;
+using ICE.Utilities;
 using ICE.Utilities.Cosmic_Helper;
 using ICE.Utilities.GatheringHelper;
 using ICE.Utilities.GatheringHelper.RouteLoader;
@@ -49,6 +50,41 @@ namespace ICE.Ui.Debug_Tabs.Debug_Ui
             }
             ImGui.SameLine();
             ImGui.Text($"{C.CustomRoutePath}");
+
+            ImGui.Separator();
+            ImGui.Text("Export Settings");
+            ImGui.Separator();
+
+            bool recordFromPlay = C.RecordGatheringFromPlay;
+            if (ImGui.Checkbox("Record from play", ref recordFromPlay))
+            {
+                C.RecordGatheringFromPlay = recordFromPlay;
+                C.SaveDebounced();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Learn/refine the active mission's route from nodes you actually gather (writes to the route).");
+
+            ImGui.SameLine();
+            bool learnByPos = C.LearnByPosition;
+            if (ImGui.Checkbox("Learn by position", ref learnByPos))
+            {
+                C.LearnByPosition = learnByPos;
+                C.SaveDebounced();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Identify nodes by rounded position instead of BaseId — enable only if respawned nodes get new BaseIds (see warning log).");
+
+            ImGui.SameLine();
+            bool autoSynth = C.AutoSynthesizeRoutes;
+            if (ImGui.Checkbox("Auto-synthesize routes", ref autoSynth))
+            {
+                C.AutoSynthesizeRoutes = autoSynth;
+                C.SaveDebounced();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When a mission has no route (or the route is incomplete), build one from nearby live nodes and persist once it has 3+ nodes.");
+
+            ImGui.Separator();
 
             for (int i = 0; i < CosmicMoonRegistry.All.Length; i++)
             {
@@ -176,6 +212,50 @@ namespace ICE.Ui.Debug_Tabs.Debug_Ui
                 {
                     GatheringRouteLoader.SaveRoute(routeInfo);
                 }
+
+                ImGui.SameLine();
+                using (var disabled = ImRaii.Disabled(_isGeneratingFan))
+                {
+                    if (ImGui.Button("Capture all nearby targetable"))
+                    {
+                        // Copy-on-write: clone, mutate the clone, reassign — the game loop may
+                        // hold a reference to the live list on its current-tick gatherInfo.
+                        var workList = routeInfo.Nodes == null ? new() : new List<NodeInfo>(routeInfo.Nodes);
+                        int before = workList.Count;
+                        int added = RouteSynthesizer.CaptureNearbyTargetable(workList, 75f);
+                        routeInfo.Nodes = workList;
+                        IceLogging.Info($"[Capture] Added {added} nodes");
+
+                        var newNodes = workList.Skip(before).ToList();
+                        _captureConflicts = RouteSynthesizer.FindNodeIdConflicts(_selectedRoute, newNodes.Select(n => n.NodeId));
+
+                        if (newNodes.Count > 0)
+                            _ = GenerateFansSequentially(newNodes);
+                    }
+                }
+
+                if (_isGeneratingFan)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(new Vector4(1f, 1f, 0f, 1f), "Sampling...");
+                }
+
+                foreach (var (conflictRouteId, conflictNodeId) in _captureConflicts)
+                {
+                    ImGui.TextColored(new Vector4(1f, 0.2f, 0.2f, 1f),
+                        $"node {conflictNodeId} already in route {conflictRouteId}");
+                }
+
+                if (ImGui.Button("Auto-order (greedy)"))
+                {
+                    if (routeInfo.Nodes != null)
+                    {
+                        RouteSynthesizer.GreedyNearestNeighborOrder(routeInfo.Nodes, Player.Position);
+                        Mission_Settings.nodeCounter = 0; // node indices changed; old counter is stale
+                    }
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Reorders nodes by nearest-neighbor for a shorter path (cosmetic; does not change which nodes are gathered).");
 
                 if (ImGui.BeginChild("Node Selection", new(200, 200), true))
                 {
@@ -381,6 +461,13 @@ namespace ICE.Ui.Debug_Tabs.Debug_Ui
 
         private static bool _isGeneratingFan = false;
         private static string _fanGenStatus = "";
+        private static List<(uint routeId, uint nodeId)> _captureConflicts = new();
+        private static async Task GenerateFansSequentially(List<NodeInfo> nodes)
+        {
+            foreach (var node in nodes)
+                await GenerateFanThenPickLandZone(node);
+        }
+
         private static async Task GenerateFanThenPickLandZone(NodeInfo node)
         {
             await GenerateFanForNode(node);

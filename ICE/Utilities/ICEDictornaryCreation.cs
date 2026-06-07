@@ -1110,6 +1110,16 @@ public sealed partial class ICE
             C.Config_Versioning = 4;
             C.SaveDebounced();
         }
+        if (C.Config_Versioning < 5)
+        {
+            // One-time: AutoSynthesizeRoutes is now default-on. Flip existing users whose saved
+            // config predates this change. Passive fallback, only acts on missing/incomplete
+            // routes, so it won't clobber curated routes.
+            C.AutoSynthesizeRoutes = true;
+
+            C.Config_Versioning = 5;
+            C.SaveDebounced();
+        }
     }
     public static void EnsureAllMission()
     {

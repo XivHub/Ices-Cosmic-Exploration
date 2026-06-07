@@ -1476,6 +1476,99 @@ namespace ICE.Scheduler.Tasks
 
         #region Gathering Functions
 
+        // Gates the BaseId position-conflict warning to once per session per node.
+        private static readonly HashSet<uint> _warnedNodeIds = new();
+
+        /// <summary>
+        /// Called when a gathering node is confirmed targetable/opened during normal play.
+        /// Computes the approach fan from the player's position (internal fan-space matching
+        /// CalculateFanPosition: 0=South, 90=East, 180=North, 270=West) and merges the node into
+        /// the in-memory route cache. Schedules a throttled disk persist when the node is new.
+        /// </summary>
+        internal static void RecordOpenedNode(
+            uint routeId,
+            uint territoryId,
+            uint jobId,
+            uint nodeId,
+            Vector3 nodePos,
+            Vector3 playerPos)
+        {
+            var route = GatheringRouteLoader.GetOrCreateRoute(routeId, territoryId, jobId);
+
+            // Angle in internal fan-space (0=South), matching CalculateFanPosition's convention.
+            // Raw output — no Pictomancy conversion (the old double-convert caused a 180° rotation).
+            float center = CalculateAngleToPlayer(nodePos, playerPos);
+            float start = ((center - 15f) % 360f + 360f) % 360f;
+            float end   = ((center + 15f) % 360f + 360f) % 360f;
+
+            var nodes = route.Nodes ?? new System.Collections.Generic.List<NodeInfo>();
+
+            // Dedup: check if this node is already recorded.
+            NodeInfo? existing = null;
+            foreach (var n in nodes)
+            {
+                if (C.LearnByPosition)
+                {
+                    float dx = MathF.Abs(MathF.Round(n.Position.X) - MathF.Round(nodePos.X));
+                    float dz = MathF.Abs(MathF.Round(n.Position.Z) - MathF.Round(nodePos.Z));
+                    if (dx <= 1.0f && dz <= 1.0f)
+                    {
+                        existing = n;
+                        break;
+                    }
+                }
+                else
+                {
+                    if (n.NodeId == nodeId)
+                    {
+                        existing = n;
+                        break;
+                    }
+                }
+            }
+
+            // Warn once if the same BaseId was seen at a different XZ position.
+            if (!C.LearnByPosition && existing != null)
+            {
+                float xDiff = MathF.Abs(existing.Position.X - nodePos.X);
+                float zDiff = MathF.Abs(existing.Position.Z - nodePos.Z);
+                if ((xDiff > 1.0f || zDiff > 1.0f) && _warnedNodeIds.Add(nodeId))
+                {
+                    IceLogging.Warning(
+                        $"BaseId {nodeId} seen at two distinct positions " +
+                        $"({existing.Position} vs {nodePos}). BaseId may not be stable per location; " +
+                        $"enable LearnByPosition to identify nodes by rounded XZ position instead.",
+                        "[RecordOpenedNode]");
+                }
+                return;
+            }
+
+            if (existing != null)
+                return;
+
+            // Best-effort navmesh land point; fall back to player position.
+            var land = (P.Navmesh.Installed && P.Navmesh.IsReady()
+                ? P.Navmesh.NearestPointReachable(playerPos, 3f, 5f)
+                : null) ?? playerPos;
+
+            var newNode = new NodeInfo
+            {
+                NodeId      = nodeId,
+                Position    = nodePos,
+                LandZone    = land,
+                RadiusStart = start,
+                RadiusEnd   = end,
+                MinDistance = 1f,
+                MaxDistance = 3f,
+                FanHeight   = 0f,
+            };
+
+            GatheringRouteLoader.AddNodeCow(route, newNode);
+
+            if (EzThrottler.Throttle($"PersistLearnedRoute_{routeId}", 3000))
+                GatheringRouteLoader.SaveRoute(route);
+        }
+
         /// <summary>
         /// Converts Pictomancy coordinates to FFXIV world coordinates.
         /// Pictomancy: 0=South, 90=West, 180=North, 270=East

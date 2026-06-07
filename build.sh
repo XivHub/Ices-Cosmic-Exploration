@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Reproducible Release x64 build for ICE on Linux.
+#
+# Needs the net10 SDK and the Dalamud dev libs. Override either via env:
+#   DOTNET=/path/to/dotnet  DALAMUD_HOME=/path/to/dalamud/dev  ./build.sh
+#
+# The plugin targets net10.0-windows8.0, so cross-building on Linux requires
+# EnableWindowsTargeting (restores the Windows ref packs from NuGet).
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+DOTNET="${DOTNET:-$HOME/.dotnet/dotnet}"
+[ -x "$DOTNET" ] || DOTNET="$(command -v dotnet)"
+
+# Find Dalamud dev libs if not provided.
+if [ -z "${DALAMUD_HOME:-}" ]; then
+    for cand in "$HOME/.xlcore/dalamud/Hooks/dev" "$HOME/.cache/dalamud-dev"; do
+        if [ -f "$cand/Dalamud.dll" ]; then
+            DALAMUD_HOME="$cand"
+            break
+        fi
+    done
+fi
+: "${DALAMUD_HOME:?Set DALAMUD_HOME to a folder containing Dalamud.dll}"
+
+echo "dotnet:       $DOTNET"
+echo "DALAMUD_HOME: $DALAMUD_HOME"
+
+DALAMUD_HOME="$DALAMUD_HOME" "$DOTNET" build ICE/ICE.csproj \
+    -c Release -p:Platform=x64 -p:EnableWindowsTargeting=true "$@"
+
+echo
+echo "Artifact: ICE/bin/x64/Release/ICE/latest.zip"

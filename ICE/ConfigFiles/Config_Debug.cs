@@ -30,6 +30,9 @@ public partial class Config
     public bool ShowDebugGatherInfo { get; set; } = false;
     public string AuthorName { get; set; } = "Puni.sh Community";
     public string CustomRoutePath { get; set; } = string.Empty;
+    public bool AutoSynthesizeRoutes { get; set; } = true;
+    public bool RecordGatheringFromPlay { get; set; } = false;
+    public bool LearnByPosition { get; set; } = false;
     public bool DisableHudClipping { get; set; } = false;
 
     public bool HighlightVisibleMissions { get; set; } = false;
