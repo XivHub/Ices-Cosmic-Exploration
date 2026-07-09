@@ -832,8 +832,8 @@ namespace ICE.Scheduler.Tasks
                                     // Time estimate: measured running average once we have enough samples,
                                     // otherwise a structural estimate from craft/gather counts.
                                     int samples = C.MissionConfig.TryGetValue(missionId, out var mCfg) ? mCfg.TotalCompletions : 0;
-                                    double time = (mCfg != null && mCfg.AverageTime > 0 && samples >= RelicExploreSamples)
-                                        ? mCfg.AverageTime
+                                    double time = (mCfg != null && mCfg.AverageTime() > 0 && samples >= RelicExploreSamples)
+                                        ? mCfg.AverageTime()
                                         : EstimateMissionSeconds(sheetInfo);
                                     if (time <= 0)
                                         time = RelicFallbackSeconds;
