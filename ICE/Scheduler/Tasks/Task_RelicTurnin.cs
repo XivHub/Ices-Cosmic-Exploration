@@ -27,8 +27,13 @@ namespace ICE.Scheduler.Tasks
         }
         public static bool? RegisterJob()
         {
-            IceLogging.Verbose("Registering what job to turn in on");
-            TurninJob = (uint)Player.Job;
+            // Turn in the relic for the job CheckState actually evaluated as upgradable
+            // (relicProgress[Mission_Settings.SelectedJob]), NOT whatever class we happen to
+            // be standing as. In "Level all crafters" mode SelectedJob is reassigned every
+            // cycle, so keying off Player.Job here made detection and turn-in disagree and
+            // the relic was never cleared -> endless hub return / job ping-pong.
+            TurninJob = Mission_Settings.SelectedJob;
+            IceLogging.Verbose($"Registering what job to turn in on: {TurninJob}");
 
             return true;
         }
