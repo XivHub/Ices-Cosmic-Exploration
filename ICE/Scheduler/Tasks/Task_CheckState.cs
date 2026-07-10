@@ -209,7 +209,34 @@ namespace ICE.Scheduler.Tasks
                 IceLogging.Info("We're going to do our standard check of [If we need to stop] and [What we need to do before a mission]", tag);
 
                 var cosmicClassInfo = CosmicHelper.Cosmic_ClassInfo();
-                if (C.StopWhenLevel)
+                if (currentMode == ModeSelect.LevelMode && C.LevelAllCrafters)
+                {
+                    // Always work the lowest-level eligible crafter, re-evaluated at every
+                    // mission boundary (levels the whole set evenly, lowest-first from the start).
+                    var next = CrafterLevelingPicker.PickNextCrafter(out var blockedByGearset);
+                    if (next == 0)
+                    {
+                        SchedulerMain.State = IceState.Idle;
+                        P.TaskManager.Tasks.Clear();
+                        PlaySoundbit();
+                        IceLogging.ChatInfo(blockedByGearset
+                            ? "Level All Crafters: remaining crafters have no gearset. Create gearsets and restart. Stopping."
+                            : "Level All Crafters: every selected crafter has reached the target level. Stopping.", "[I.C.E.]");
+                        return true;
+                    }
+
+                    if (next != jobId)
+                    {
+                        Mission_Settings.SelectedJob = next;
+                        if (EzThrottler.Throttle("LevelAllCrafters swap", 500))
+                            GearsetHandler.TaskClassChange((Job)next);
+                        CosmicHandler.EnsureStandardMissionTab(next);
+                        IceLogging.ChatInfo($"Level All Crafters: switching to {CosmicHelper.GetJobName(next)} (Lv {Player.GetLevel((Job)next)}/{C.TargetLevel}).", "[I.C.E.]");
+                        return true;
+                    }
+                    // next == jobId: current crafter is already the lowest eligible; fall through and grab its mission.
+                }
+                else if (C.StopWhenLevel)
                 {
                     var level = Player.GetLevel((Job)jobId);
                     if (level >= C.TargetLevel)

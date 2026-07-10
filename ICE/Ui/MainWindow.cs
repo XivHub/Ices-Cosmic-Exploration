@@ -8,6 +8,7 @@ using ICE.Ui.MainUi.HelpFolder;
 using ICE.Ui.MainUi.ModeSelect_Modes;
 using ICE.Ui.MainUi.Settings;
 using ICE.Ui.MainUi.Settings.Settings_Table;
+using ICE.Utilities.Cosmic_Helper;
 using System.Collections.Generic;
 using System.Reflection;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.ToolTip;
@@ -129,6 +130,10 @@ namespace ICE.Ui
                 C.Save();
             }
             ImGuiEx.HelpMarker(HelpInfoText(ModeSelect.LevelMode));
+            if (xpLeveling)
+            {
+                LevelAllCraftersOptions();
+            }
             if (ImGui.RadioButton("Gold Completion Grind", goldMode))
             {
                 C.SelectedMode = ModeSelect.MissionGoldMode;
@@ -141,6 +146,48 @@ namespace ICE.Ui
                 C.Save();
             }
             ImGuiEx.HelpMarker(HelpInfoText(ModeSelect.AgendaMode));
+        }
+        public static void LevelAllCraftersOptions()
+        {
+            bool levelAllCrafters = C.LevelAllCrafters;
+            if (ImGui.Checkbox("Level all crafters", ref levelAllCrafters))
+            {
+                C.LevelAllCrafters = levelAllCrafters;
+                C.Save();
+            }
+
+            if (C.LevelAllCrafters)
+            {
+                ImGui.Indent();
+
+                int targetLevel = C.TargetLevel;
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.SliderInt("Target Level", ref targetLevel, 10, 100))
+                {
+                    C.TargetLevel = targetLevel;
+                    C.SaveDebounced();
+                }
+
+                int perRow = 4;
+                for (int i = 0; i < CosmicHelper.CrafterJobList.Count; i++)
+                {
+                    uint jobId = CosmicHelper.CrafterJobList[i];
+                    bool selected = C.LevelAllCrafterJobs.Contains(jobId);
+                    if (ImGui.Checkbox(CosmicHelper.GetJobName(jobId), ref selected))
+                    {
+                        if (selected)
+                            C.LevelAllCrafterJobs.Add(jobId);
+                        else
+                            C.LevelAllCrafterJobs.Remove(jobId);
+                        C.Save();
+                    }
+
+                    if ((i + 1) % perRow != 0 && i != CosmicHelper.CrafterJobList.Count - 1)
+                        ImGui.SameLine();
+                }
+
+                ImGui.Unindent();
+            }
         }
         public static string HelpInfoText(ModeSelect mode)
         {
@@ -158,6 +205,7 @@ namespace ICE.Ui
                     "-> These are hand picked by me, and determined by the time it takes to complete it\n" +
                     "-> For crafters it's whatever missions take the least amount of progress" +
                     "-> For gathering, it's whatever is the least pain to do w/ the minimum amount of skills\n" +
+                    "-> Enabling 'Level all crafters' will auto-advance to the next lowest-level selected crafter until all reach the target level\n" +
                     "**These will automatically set settings for using these modes temporarily**",
                 ModeSelect.RelicMode =>
                     "Relic Grind\n" +

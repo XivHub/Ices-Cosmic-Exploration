@@ -8,6 +8,8 @@ public partial class Config
     public ModeSelect SelectedMode { get; set; } = ModeSelect.Standard;
     public bool OnlyGrabMission_Debug { get; set; } = false;
     public int TargetLevel { get; set; } = 100;
+    public bool LevelAllCrafters { get; set; } = false;
+    public List<uint> LevelAllCrafterJobs { get; set; } = new() { 8, 9, 10, 11, 12, 13, 14, 15 };
     public bool StopWhenLevel { get; set; } = false;
     public bool StopOnceHitCosmoCredits { get; set; } = false;
     public int CosmoCreditsCap { get; set; } = 30_000;

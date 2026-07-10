@@ -39,5 +39,18 @@ namespace ICE.Scheduler.Handlers
                 IceLogging.Verbose($"Hewwo. We have gotten thiws faw, which means thawt the geawset fow {job.ToString()} doesn't exist. Pwease make owne", "Task: Equip Gearset");
             return;
         }
+
+        internal unsafe static bool HasGearset(Job job)
+        {
+            var gearsets = RaptureGearsetModule.Instance();
+            foreach (ref var gs in gearsets->Entries)
+            {
+                if (!RaptureGearsetModule.Instance()->IsValidGearset(gs.Id)) continue;
+                if ((Job)gs.ClassJob == job)
+                    return true;
+            }
+
+            return false;
+        }
     }
 }

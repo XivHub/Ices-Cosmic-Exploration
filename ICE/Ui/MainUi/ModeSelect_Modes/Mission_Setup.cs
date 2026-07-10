@@ -165,8 +165,10 @@ namespace ICE.Ui.MainUi.ModeSelect_Modes
                     && CosmicMoonRegistry.TryGetMoon(Player.Territory.RowId, out var currentMoon)
                     && !CosmicMoonRegistry.HasLevelingContent(currentMoon);
 
+                bool noCraftersSelected = C.SelectedMode == ModeSelect.LevelMode && C.LevelAllCrafters && !CrafterLevelingPicker.AnyCraftersSelected();
+
                 // Leveling on a hub requires QuickLevelList entries; gathering still needs route YAML per territory
-                using (ImRaii.Disabled(SchedulerMain.State != IceState.Idle || !usingSupportedJob || unsupportedMoon))
+                using (ImRaii.Disabled(SchedulerMain.State != IceState.Idle || !usingSupportedJob || unsupportedMoon || noCraftersSelected))
                 {
                     if (ImGui.Button("Start", new Vector2(150 * scale, 0)))
                     {
@@ -203,6 +205,18 @@ namespace ICE.Ui.MainUi.ModeSelect_Modes
                             missing.Add("gathering routes");
                         if (missing.Count > 0)
                             ImGui.Text($"Still needed: {string.Join(", ", missing)}.");
+                        ImGui.EndTooltip();
+                    }
+                }
+                else if (noCraftersSelected)
+                {
+                    ImGui.SameLine(0, 10 * scale);
+                    ImGui.SetCursorPosY(ImGui.GetCursorPosY() + yOffset);
+                    ImGuiEx.Icon(EColor.Red, FontAwesomeIcon.ExclamationTriangle);
+                    if (ImGui.IsItemHovered())
+                    {
+                        ImGui.BeginTooltip();
+                        ImGui.Text("Level all crafters is on but no crafters are selected.");
                         ImGui.EndTooltip();
                     }
                 }
