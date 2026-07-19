@@ -236,6 +236,34 @@ namespace ICE.Scheduler.Tasks
                     }
                     // next == jobId: current crafter is already the lowest eligible; fall through and grab its mission.
                 }
+                else if (currentMode == ModeSelect.RelicMode && C.FarmAllRelics)
+                {
+                    // Farm every enabled relic to max, one job at a time, in priority order
+                    // (crafters -> gatherers -> fisher last). Re-evaluated each mission boundary:
+                    // when the current relic caps, PickNextRelicJob returns the next eligible job.
+                    var next = RelicJobPicker.PickNextRelicJob(out var blockedByGearset);
+                    if (next == 0)
+                    {
+                        SchedulerMain.State = IceState.Idle;
+                        P.TaskManager.Tasks.Clear();
+                        PlaySoundbit();
+                        IceLogging.ChatInfo(blockedByGearset
+                            ? "Farm All Relics: remaining relics have no gearset. Create gearsets and restart. Stopping."
+                            : "Farm All Relics: every selected relic is complete. Stopping.", "[I.C.E.]");
+                        return true;
+                    }
+
+                    if (next != jobId)
+                    {
+                        Mission_Settings.SelectedJob = next;
+                        if (EzThrottler.Throttle("FarmAllRelics swap", 500))
+                            GearsetHandler.TaskClassChange((Job)next);
+                        CosmicHandler.EnsureStandardMissionTab(next);
+                        IceLogging.ChatInfo($"Farm All Relics: switching to {CosmicHelper.GetJobName(next)}.", "[I.C.E.]");
+                        return true;
+                    }
+                    // next == jobId: current relic not yet maxed; fall through and grab its mission.
+                }
                 else if (C.StopWhenLevel)
                 {
                     var level = Player.GetLevel((Job)jobId);
@@ -312,7 +340,7 @@ namespace ICE.Scheduler.Tasks
                             if (canTurnin)
                             {
                                 IceLogging.Verbose("We can turn in the relic! (Allegedly) So going to check to see if we need to do so", tag);
-                                if (C.TurninRelic)
+                                if (C.RelicAutoTurnin)
                                 {
                                     IceLogging.Verbose("We have turnin set to true, going to queue up later turning the relic into researchingWay", tag);
                                 }
@@ -628,7 +656,7 @@ namespace ICE.Scheduler.Tasks
             {
                 BuyItems = true;
             }
-            if (C.TurninRelic)
+            if (C.RelicAutoTurnin)
             {
                 var jobId = Mission_Settings.SelectedJob;
                 var relicInfo = relicProgress[jobId];

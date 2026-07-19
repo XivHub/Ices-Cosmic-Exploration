@@ -1,12 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using ICE.Enums;
 
 namespace ICE.ConfigFiles;
 
 public partial class Config
 {
     public bool TurninRelic { get; set; } = false;
+
+    /// <summary>
+    /// Turn-in must be on for "Farm all relics" to advance a tool to max, so treat it as
+    /// effectively enabled whenever that mode is active. Computed, never persisted, so the
+    /// user's stored TurninRelic preference is left untouched when they disable the mode.
+    /// </summary>
+    public bool RelicAutoTurnin => TurninRelic || (SelectedMode == ModeSelect.RelicMode && FarmAllRelics);
     public bool Relic_SwapJob { get; set; } = false;
     public uint Relic_BattleJob { get; set; } = 0;
     public bool Relic_Stylist { get; set; } = true;

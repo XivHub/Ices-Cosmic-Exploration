@@ -166,9 +166,10 @@ namespace ICE.Ui.MainUi.ModeSelect_Modes
                     && !CosmicMoonRegistry.HasLevelingContent(currentMoon);
 
                 bool noCraftersSelected = C.SelectedMode == ModeSelect.LevelMode && C.LevelAllCrafters && !CrafterLevelingPicker.AnyCraftersSelected();
+                bool noRelicsSelected = C.SelectedMode == ModeSelect.RelicMode && C.FarmAllRelics && !RelicJobPicker.AnyRelicJobsSelected();
 
                 // Leveling on a hub requires QuickLevelList entries; gathering still needs route YAML per territory
-                using (ImRaii.Disabled(SchedulerMain.State != IceState.Idle || !usingSupportedJob || unsupportedMoon || noCraftersSelected))
+                using (ImRaii.Disabled(SchedulerMain.State != IceState.Idle || !usingSupportedJob || unsupportedMoon || noCraftersSelected || noRelicsSelected))
                 {
                     if (ImGui.Button("Start", new Vector2(150 * scale, 0)))
                     {
@@ -297,11 +298,17 @@ namespace ICE.Ui.MainUi.ModeSelect_Modes
                     }
 
                     ImGui.Checkbox("Stop after current mission", ref Mission_Settings.StopAfterCurrent);
-                    bool relicTurnin = C.TurninRelic;
-                    if (ImGui.Checkbox($"Turnin if relic is complete##RelicTurnin_GeneralSetting", ref relicTurnin))
+                    // Farm All Relics forces turn-in on (RelicAutoTurnin); reflect that as a checked,
+                    // disabled box so the user isn't confused by turn-ins happening while it looks off.
+                    bool relicTurninForced = C.SelectedMode == ModeSelect.RelicMode && C.FarmAllRelics;
+                    bool relicTurnin = relicTurninForced || C.TurninRelic;
+                    using (ImRaii.Disabled(relicTurninForced))
                     {
-                        C.TurninRelic = relicTurnin;
-                        C.Save();
+                        if (ImGui.Checkbox($"Turnin if relic is complete##RelicTurnin_GeneralSetting", ref relicTurnin))
+                        {
+                            C.TurninRelic = relicTurnin;
+                            C.Save();
+                        }
                     }
                     ImGui.SameLine();
                     ImGui.TextDisabled("?");

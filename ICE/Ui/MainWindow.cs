@@ -123,6 +123,10 @@ namespace ICE.Ui
                 C.Save();
             }
             ImGuiEx.HelpMarker(HelpInfoText(ModeSelect.RelicMode));
+            if (relicMode)
+            {
+                FarmAllRelicsOptions();
+            }
 
             if (ImGui.RadioButton("Leveling Grind", xpLeveling))
             {
@@ -189,6 +193,48 @@ namespace ICE.Ui
                 ImGui.Unindent();
             }
         }
+        public static void FarmAllRelicsOptions()
+        {
+            bool farmAll = C.FarmAllRelics;
+            if (ImGui.Checkbox("Farm all relics", ref farmAll))
+            {
+                C.FarmAllRelics = farmAll;
+                C.Save();
+            }
+            ImGuiEx.HelpMarker(
+                "Grinds each selected relic to max, one job at a time, in priority order: " +
+                "crafters first, then gatherers, fisher last. Auto-swaps to the next job when a " +
+                "relic caps and stops once all are complete. Relic turn-in is forced on while this " +
+                "is active. Jobs without a saved gearset are skipped.");
+
+            if (C.FarmAllRelics)
+            {
+                ImGui.Indent();
+                // Three tiers, in the order they are farmed: crafters -> gatherers -> fisher last.
+                RelicJobRow("Crafters", CosmicHelper.CrafterJobList);
+                RelicJobRow("Gatherers", CosmicHelper.GatheringJobList.Where(j => j != 18).ToList());
+                RelicJobRow("Fisher", CosmicHelper.GatheringJobList.Where(j => j == 18).ToList());
+                ImGui.Unindent();
+            }
+        }
+        private static void RelicJobRow(string label, IReadOnlyList<uint> jobs)
+        {
+            ImGui.TextDisabled(label);
+            const int perRow = 4;
+            for (int i = 0; i < jobs.Count; i++)
+            {
+                uint jobId = jobs[i];
+                bool selected = C.RelicJobs.TryGetValue(jobId, out var on) && on;
+                if (ImGui.Checkbox(CosmicHelper.GetJobName(jobId), ref selected))
+                {
+                    C.RelicJobs[jobId] = selected;
+                    C.Save();
+                }
+
+                if ((i + 1) % perRow != 0 && i != jobs.Count - 1)
+                    ImGui.SameLine();
+            }
+        }
         public static string HelpInfoText(ModeSelect mode)
         {
             return mode switch
@@ -211,7 +257,8 @@ namespace ICE.Ui
                     "Relic Grind\n" +
                     "-> Automatically select which missions that are best to finish up your relic\n" +
                     "-> These are weighed based on what is needed to complete the tool to the next step\n" +
-                    "-> If you want to only do certain missions, enable the option and select which ones you want to do",
+                    "-> If you want to only do certain missions, enable the option and select which ones you want to do\n" +
+                    "-> Enabling 'Farm all relics' will auto-advance through your selected jobs (crafters -> gatherers -> fisher last), maxing each relic before moving on",
                 ModeSelect.AgendaMode =>
                     "This mode is if you want to do a series of things in a particular order. So for example, if you wanted to grind out all the relics on all the classes back to back\n" +
                     "Or if you wanted to do the relic on WVR -> Then farm score on BTN -> Farm credits on BSM\n" +
