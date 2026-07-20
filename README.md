@@ -2,8 +2,8 @@
 
 Repo: `https://puni.sh/api/repository/ice`
 
-> **ZhyraPlugins fork.** Custom Dalamud repo: `https://edgl.dev/share/zhyra/pluginmaster.json`
-> See [Fork changes](#fork-changes-zhyraplugins) for what this build adds over upstream.
+> **XivHub fork.** Custom Dalamud repo: `https://plugins.xivhub.net/pluginmaster.json`
+> See [Fork changes](#fork-changes-xivhub) for what this build adds over upstream.
 
 Welcome to the moon plugin that makes that dreadful grind of the moon into something that can be automated and made so much simplier.  
 The overall purpose of this is to help you re-roll and grind out certain Cosmic Exploration missinos. From anywhere on trying to get gold on every mission for that title, to grinding out relic experience so you get your crafter/gathering tools. Or even if you're grinding up to 500k points on each and every class.
@@ -30,7 +30,7 @@ Just need navmesh
 
 There is an in plugin window that goes over the specifics of each kind/will also show give you buttons to install plugins if you don't have them already. 
 
-## Fork changes (ZhyraPlugins)
+## Fork changes (XivHub)
 
 This fork tracks upstream and adds:
 
