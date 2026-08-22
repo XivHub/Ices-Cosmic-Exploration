@@ -136,6 +136,9 @@ namespace ICE.Ui.Debug_Tabs.Debug_Ui
             {
                 UseCordial();
             }
+
+            bool CollectablesUnlocked = QuestCheck.CollectablesUnlocked();
+            ImGui.Text($"Collectbles unlocked on this character: {CollectablesUnlocked}");
             // ImGui.Text($"Any need repaired: {PlayerHelper.AnyNeedsRepair(99)}");
         }
 
